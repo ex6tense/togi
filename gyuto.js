@@ -1,5 +1,6 @@
-// Gyuto 3D procedural: hoja con biselado real (sección en cuña), acabado kasumi + hamon,
-// filo pulido a espejo, virola octogonal de cuerno y mango wa de madera. Gira siguiendo el cursor.
+// Cuchillo 3D procedural calcado del cuchillo de Togi (foto de referencia): hoja de ~175 mm con punta
+// kiritsuke (lomo recto que cae en ángulo hasta la punta), filo casi plano, acabado moteado tipo nashiji,
+// línea de laminado ondulada cerca del filo y mango octogonal de madera oscura. Gira siguiendo el cursor.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
@@ -7,10 +8,10 @@ const box = document.getElementById('gyuto');
 if (box) {
   const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // ---------- Perfil de la hoja (1 unidad ≈ 50 mm; hoja de 210 mm) ----------
-  const L = 4.2, H = 0.95, TIP = 0.6;
-  const edgeY = x => (x <= 2 ? 0 : Math.pow((x - 2) / (L - 2), 2.2) * TIP);              // filo: plano y luego "barriga"
-  const spineY = x => (x <= 2.6 ? H : H - Math.pow((x - 2.6) / (L - 2.6), 2.4) * (H - TIP)); // lomo: recto y baja a la punta
+  // ---------- Perfil de la hoja (1 unidad ≈ 50 mm; hoja de 175 mm, 48 mm de alto en el talón) ----------
+  const L = 3.5, H = 0.97, CLIP = 2.75;                    // CLIP: donde el lomo empieza a caer (punta kiritsuke)
+  const edgeY = x => 0.3 * Math.pow(x / L, 1.8);                                          // filo casi plano que sube suave
+  const spineY = x => (x <= CLIP ? H : H - (x - CLIP) / (L - CLIP) * (H - edgeY(L)));     // lomo recto y corte recto a la punta
   const thick = (u, v) => Math.max(0.0015, 0.05 * (1 - 0.7 * u) * Math.pow(Math.min(1, v / 0.45), 0.75)); // cuña + adelgaza hacia la punta
 
   // Malla paramétrica: fn(a, b) -> [x, y, z], con UV = (a, b)
@@ -45,7 +46,8 @@ if (box) {
     t.anisotropy = 8;
     return t;
   };
-  const hamon = x => 0.27 + 0.035 * Math.sin(x * 0.011) + 0.02 * Math.sin(x * 0.037 + 1.3); // línea ondulada del templado (v)
+  // línea del laminado (v desde el filo): ondas irregulares como en la foto
+  const hamon = x => 0.24 + 0.03 * Math.sin(x * 0.009) + 0.018 * Math.sin(x * 0.031 + 1.3) + 0.01 * Math.sin(x * 0.09 + 2.1);
 
   // Acero: el cuerpo con acabado kasumi (cepillado y opaco); bajo el hamon más claro, y el filo a espejo.
   const paintSteel = (base, low, edge, lines) => (g, w, h) => {
@@ -58,22 +60,42 @@ if (box) {
     g.beginPath(); g.moveTo(0, h);
     for (let x = 0; x <= w; x += 4) g.lineTo(x, h * (1 - hamon(x)));
     g.lineTo(w, h); g.closePath();
-    g.filter = 'blur(6px)'; g.fillStyle = low; g.fill(); g.filter = 'none';
-    g.fillStyle = edge; g.fillRect(0, h * 0.93, w, h * 0.07); // bisel del filo
+    g.filter = 'blur(2px)'; g.fillStyle = low; g.fill(); g.filter = 'none';
+    g.fillStyle = edge; g.fillRect(0, h * 0.94, w, h * 0.06); // bisel del filo
+  };
+  // moteado tipo nashiji: grupos de puntos oscuros sobre la línea del laminado, con semilla fija
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const specks = (color, line) => (g, w, h) => {
+    seed = 7;
+    for (let c = 0; c < 70; c++) {
+      const cx = rnd() * w, cy = h * (0.08 + rnd() * 0.5), sx = 40 + rnd() * 120, sy = 12 + rnd() * 40;
+      for (let i = 0; i < 220; i++) {
+        const x = cx + (rnd() + rnd() + rnd() - 1.5) * sx, y = cy + (rnd() + rnd() + rnd() - 1.5) * sy;
+        if (y > h * (1 - hamon(x)) - 6) continue;
+        g.fillStyle = color; g.beginPath(); g.arc(x, y, .5 + rnd() * 1.8, 0, 7); g.fill();
+      }
+    }
+    g.strokeStyle = line; g.lineWidth = 2.5; g.beginPath();   // la línea fina y ondulada del laminado
+    for (let x = 0; x <= w; x += 3) g.lineTo(x, h * (1 - hamon(x)) + Math.sin(x * .4) * .8);
+    g.stroke();
   };
   const steelMap = tex(2048, 512, (g, w, h) => {
-    paintSteel('#b4b8bb', '#e4e7e9', '#f6f8f9', .05)(g, w, h);
+    paintSteel('#c3c6c8', '#e9ebec', '#f6f8f9', .04)(g, w, h);
+    specks('rgba(70,72,76,.55)', 'rgba(90,92,96,.7)')(g, w, h);
     g.fillStyle = 'rgba(40,40,44,.55)';                    // marca grabada: 研 (togi)
     g.font = `${h * .2}px "Yu Mincho","MS Mincho","Hiragino Mincho ProN",serif`;
     g.fillText('研', w * 0.05, h * 0.42);
   });
-  const roughMap = tex(2048, 512, paintSteel('#6e6e6e', '#3a3a3a', '#121212', .08), false);
+  const roughMap = tex(2048, 512, (g, w, h) => {
+    paintSteel('#5e5e5e', '#2c2c2c', '#121212', .08)(g, w, h);
+    specks('#b0b0b0', '#808080')(g, w, h);                 // las motas son mate, el resto pulido
+  }, false);
 
   const wood = tex(512, 1024, (g, w, h) => {
-    g.fillStyle = '#5b3b27'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#2f2420'; g.fillRect(0, 0, w, h);       // madera oscura tipo ébano / wengué
     for (let i = 0; i < 260; i++) {                         // veta a lo largo del mango
       const x0 = Math.random() * w, a = 4 + Math.random() * 14, f = .002 + Math.random() * .006;
-      g.strokeStyle = Math.random() < .5 ? `rgba(30,16,8,${.15 + Math.random() * .3})` : `rgba(150,100,60,${.08 + Math.random() * .15})`;
+      g.strokeStyle = Math.random() < .5 ? `rgba(12,8,6,${.2 + Math.random() * .35})` : `rgba(110,85,70,${.08 + Math.random() * .14})`;
       g.lineWidth = .5 + Math.random() * 2.5;
       g.beginPath();
       for (let y = 0; y <= h; y += 8) g.lineTo(x0 + Math.sin(y * f + i) * a, y);
@@ -94,14 +116,13 @@ if (box) {
     g.rotateY(Math.PI / 8); g.rotateZ(Math.PI / 2);
     return new THREE.Mesh(g, mat);
   };
-  const HY = 0.76;                                         // altura del eje del mango
-  const horn = octo(0.152, 0.148, 0.28, new THREE.MeshPhysicalMaterial({ color: 0x1b1918, roughness: .35, clearcoat: .8, clearcoatRoughness: .2 }));
-  horn.position.set(-0.14, HY, 0);
-  const handle = octo(0.13, 0.15, 1.55, new THREE.MeshPhysicalMaterial({ map: wood, roughness: .55, clearcoat: .35, clearcoatRoughness: .4 }));
-  handle.position.set(-0.28 - 0.775, HY, 0);
-  knife.add(horn, handle);
+  // mango octogonal de una pieza (137 mm, ~24 mm de grueso), al ras del lomo; el talón baja ~25 mm por debajo
+  const R = 0.25, HL = 2.75, HY = H - R * 0.92;
+  const handle = octo(R * 0.94, R, HL, new THREE.MeshPhysicalMaterial({ map: wood, roughness: .5, clearcoat: .4, clearcoatRoughness: .35 }));
+  handle.position.set(-HL / 2, HY, 0);
+  knife.add(handle);
 
-  knife.position.set(-(L - 1.83) / 2, -0.55, 0);           // centra el conjunto (de -1.83 a 4.2 en X)
+  knife.position.set(-(L - HL) / 2, -0.5, 0);              // centra el conjunto (de -2.75 a 3.5 en X)
   const pivot = new THREE.Group();
   pivot.add(knife);
 
@@ -123,7 +144,7 @@ if (box) {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    camera.position.set(0, 0, Math.max(6.4 / (2 * t * camera.aspect), 3.4 / (2 * t)));
+    camera.position.set(0, 0, Math.max(6.6 / (2 * t * camera.aspect), 3.4 / (2 * t)));
     camera.updateProjectionMatrix();
   };
   new ResizeObserver(fit).observe(box);
