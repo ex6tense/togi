@@ -1,9 +1,11 @@
 // Cuchillo 3D del cuchillo real de Togi (punta kiritsuke, ~175 mm), con texturas sacadas de la foto.
 // Se ve la hoja entrando por el borde derecho del hero, con la punta hacia el texto; el mango está fuera de cuadro
 // y aparece al girarlo. Sigue un poco al cursor
-// y se puede arrastrar (o girar con las flechas) para verla por todos lados.
+// y se puede arrastrar (o girar con las flechas) para verla por todos lados. Cada tanto aparece una piedra de agua
+// y el cuchillo se afila solo.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -81,14 +83,49 @@ function montar(box) {
   const rim = new THREE.DirectionalLight(0xfff4e6, .8); rim.position.set(-4, 2, -3);
   scene.add(key, rim, pivot);
 
+  // ---------- Piedra de agua (210 × 70 mm): capa de grano naranja mojada sobre una base de goma ----------
+  const grano = document.createElement('canvas'); grano.width = grano.height = 512;
+  const gg = grano.getContext('2d');
+  gg.fillStyle = '#d9824f'; gg.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 9000; i++) {                           // grano de la piedra
+    gg.fillStyle = Math.random() < .5 ? `rgba(120,55,25,${Math.random() * .25})` : `rgba(255,210,170,${Math.random() * .2})`;
+    gg.fillRect(Math.random() * 512, Math.random() * 512, 1 + Math.random() * 2, 1 + Math.random() * 2);
+  }
+  const granoTex = new THREE.CanvasTexture(grano); granoTex.colorSpace = THREE.SRGBColorSpace;
+  const piedraMat = new THREE.MeshPhysicalMaterial({ map: granoTex, roughness: .9, clearcoat: .9, clearcoatRoughness: .12, transparent: true }); // brillo de agua
+  const baseMat = new THREE.MeshPhysicalMaterial({ color: 0x2b2826, roughness: .7, transparent: true });
+  const piedra = new THREE.Mesh(new RoundedBoxGeometry(4.0, 0.34, 1.35, 3, .04), piedraMat);
+  const goma = new THREE.Mesh(new RoundedBoxGeometry(4.3, 0.2, 1.6, 3, .06), baseMat);
+  goma.position.y = -0.25;
+  const mesa = new THREE.Group();                            // inclinada hacia la cámara para ver la cara de arriba
+  mesa.add(piedra, goma);
+  mesa.rotation.set(0.55, -0.25, 0);
+  const MESA_Y = -0.85;
+  mesa.visible = false;
+  scene.add(mesa);
+  const TOP = 0.17;                                          // cara de arriba de la piedra (local)
+
+  // pose de afilado: hoja casi plana sobre la piedra, lomo levantado ~15°, cuchillo cruzado ~25°
+  const a = 0.45, th = THREE.MathUtils.degToRad(15);
+  const X = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+  const P = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a));
+  const Y = P.clone().multiplyScalar(-Math.cos(th)).addScaledVector(new THREE.Vector3(0, 1, 0), Math.sin(th));
+  const Z = new THREE.Vector3().crossVectors(X, Y);
+  const marca = new THREE.Object3D();                        // dónde va el pivote del cuchillo durante el afilado
+  marca.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
+  mesa.add(marca);
+  const qA = new THREE.Quaternion(), qB = new THREE.Quaternion(), pA = new THREE.Vector3(), pB = new THREE.Vector3(), eul = new THREE.Euler();
+
   const camera = new THREE.PerspectiveCamera(24, 1, .1, 100);
+  let camZ = 10;
   const fit = () => {
     const w = box.clientWidth, h = box.clientHeight;
     if (!w || !h) return;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    camera.position.set(0, 0, Math.max(foco.ancho / (2 * t * camera.aspect), 1.6 / (2 * t)));
+    camZ = Math.max(foco.ancho / (2 * t * camera.aspect), 1.6 / (2 * t));
+    camera.position.set(0, 0, camZ);
     camera.updateProjectionMatrix();
   };
   new ResizeObserver(fit).observe(box);
@@ -116,7 +153,10 @@ function montar(box) {
     spin.y += vel.y; spin.x += vel.x;
     drag.x = e.clientX; drag.y = e.clientY;
   });
+  // si la persona agarra el cuchillo, se deja de afilar un rato
+  let pausa = 0;
   const soltar = () => { drag = null; if (quieto) vel.x = vel.y = 0; };
+  box.addEventListener('pointerdown', () => { pausa = performance.now() + 8000; });
   box.addEventListener('pointerup', soltar);
   box.addEventListener('pointercancel', soltar);
   box.addEventListener('keydown', e => {
@@ -126,7 +166,7 @@ function montar(box) {
     vel.x += k[0]; vel.y += k[1];
   });
 
-  let visible = true;
+  let visible = true, piedraK = 0, afiladoK = 0;
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(box);
   const frame = t => {
     requestAnimationFrame(frame);
@@ -142,8 +182,29 @@ function montar(box) {
       }
     }
     const f = quieto ? 0 : t / 1000;
-    pivot.rotation.set(base.x + cur.x + spin.x + Math.sin(f * .8) * .02, base.y + cur.y + spin.y + Math.sin(f * .5) * .05, base.z);
-    pivot.position.y = Math.sin(f * 1.1) * .04;
+    // ciclo de 22 s: 4 s quieto → aparece la piedra → el cuchillo baja y afila ~9 s → vuelve → se va la piedra
+    const c = f % 22, libre = !quieto && !drag && t > pausa;
+    piedraK += ((libre && c > 4 && c < 16 ? 1 : 0) - piedraK) * .05;
+    afiladoK += ((libre && c > 5.2 && c < 14.4 && piedraK > .9 ? 1 : 0) - afiladoK) * .04;
+    mesa.visible = piedraK > .01;
+    mesa.position.set(0.15, MESA_Y - (1 - piedraK) * 1.2, 0);
+    piedraMat.opacity = baseMat.opacity = piedraK;
+    camera.position.set(0, -0.35 * piedraK, camZ * (1 + 1.1 * piedraK)); // se aleja para que entren piedra y cuchillo
+
+    pA.set(0, Math.sin(f * 1.1) * .04, 0);
+    qA.setFromEuler(eul.set(base.x + cur.x + spin.x + Math.sin(f * .8) * .02, base.y + cur.y + spin.y + Math.sin(f * .5) * .05, base.z));
+    if (afiladoK > .001) {
+      const golpe = Math.sin(f * Math.PI * 2 / 1.5);           // pasadas de ida y vuelta por la piedra
+      marca.position.set(golpe * 0.9, TOP + 0.012, 0).addScaledVector(Y, 0.5);
+      mesa.updateMatrixWorld(true);
+      marca.getWorldPosition(pB); marca.getWorldQuaternion(qB);
+      const k = afiladoK * afiladoK * (3 - 2 * afiladoK);
+      pivot.quaternion.slerpQuaternions(qA, qB, k);
+      pivot.position.lerpVectors(pA, pB, k);
+    } else {
+      pivot.quaternion.copy(qA);
+      pivot.position.copy(pA);
+    }
     renderer.render(scene, camera);
   };
   requestAnimationFrame(frame);                              // sigue corriendo con "reducir movimiento" para pintar texturas al cargar, pero sin flotar
