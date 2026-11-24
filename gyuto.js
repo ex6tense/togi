@@ -1,5 +1,6 @@
 // Cuchillo 3D del cuchillo real de Togi (punta kiritsuke, ~175 mm), con texturas sacadas de la foto.
-// Solo se ve la hoja: entra por el borde derecho del hero con la punta hacia el texto. Sigue un poco al cursor
+// Se ve la hoja entrando por el borde derecho del hero, con la punta hacia el texto; el mango está fuera de cuadro
+// y aparece al girarlo. Sigue un poco al cursor
 // y se puede arrastrar (o girar con las flechas) para verla por todos lados.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -11,6 +12,7 @@ const L = 3.5, H = 0.97, CLIP = 2.75;                       // CLIP: donde el lo
 const edgeY = x => 0.3 * Math.pow(x / L, 1.8);              // filo casi plano que sube suave
 const spineY = x => (x <= CLIP ? H : H - (x - CLIP) / (L - CLIP) * (H - edgeY(L)));
 const thick = (u, v) => Math.max(0.0015, 0.05 * (1 - 0.7 * u) * Math.pow(Math.min(1, v / 0.45), 0.75)); // cuña
+const R = 0.25, HL = 2.75, HY = H - R * 0.92;               // mango: 137 mm, ~24 mm de grueso, al ras del lomo
 
 const sheet = (fn, na, nb) => {                              // malla paramétrica fn(a, b) -> [x, y, z], UV = (a, b)
   const pos = [], uv = [], idx = [];
@@ -28,8 +30,24 @@ const sheet = (fn, na, nb) => {                              // malla paramétri
 };
 const side = s => (u, v) => { const x = u * L; return [x, edgeY(x) + (spineY(x) - edgeY(x)) * v, s * thick(u, v) / 2]; };
 
+// mango octogonal con aristas redondeadas (64 lados: 8 caras planas + chaflanes suaves)
+const handleGeo = () => {
+  const g = new THREE.CylinderGeometry(1, 1, HL, 64, 1);
+  const p = g.attributes.position, a = Math.PI / 8;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i), y = p.getY(i), r = Math.hypot(x, z);
+    if (r < 1e-6) continue;
+    const th = Math.atan2(z, x) + a, d = ((th % (2 * a)) + 2 * a) % (2 * a) - a;
+    const oct = Math.cos(a) / Math.cos(d), rr = (0.82 * oct + 0.18 * Math.cos(a) * 1.04) * (y > 0 ? R * 0.94 : R);
+    p.setXYZ(i, x / r * rr, y, z / r * rr);
+  }
+  g.computeVertexNormals();
+  g.rotateZ(Math.PI / 2);
+  return g;
+};
+
 const loader = new THREE.TextureLoader();
-const load = url => loader.load(url, t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.needsUpdate = true; });
+const load = (url, setup) => loader.load(url, t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; setup?.(t); t.needsUpdate = true; });
 
 function montar(box) {
   // ---------- Modelo ----------
@@ -40,6 +58,11 @@ function montar(box) {
   knife.add(new THREE.Mesh(sheet(side(1), 300, 48), steel), new THREE.Mesh(sheet(side(-1), 300, 48), steel),
     new THREE.Mesh(sheet((u, s) => { const x = u * L, t = thick(u, 1) / 2; return [x, spineY(x), -t + 2 * t * s]; }, 300, 2), edgeMat),
     new THREE.Mesh(sheet((v, s) => { const y = edgeY(0) + (spineY(0) - edgeY(0)) * v, t = thick(0, v) / 2; return [0, y, -t + 2 * t * s]; }, 48, 2), edgeMat));
+  // el mango queda fuera de la pantalla (a la derecha) y solo aparece al girar el cuchillo
+  const handle = new THREE.Mesh(handleGeo(), new THREE.MeshPhysicalMaterial({
+    map: load('tex/mango.jpg', t => { t.wrapS = THREE.RepeatWrapping; t.repeat.set(4, 1); }), roughness: .45, clearcoat: .5, clearcoatRoughness: .3 }));
+  handle.position.set(-HL / 2, HY, 0);
+  knife.add(handle);
   const foco = { x: 2.1, y: 0.5, ancho: 3.4 };                // encuadre: el talón queda fuera por el borde derecho
   knife.position.set(-foco.x, -foco.y, 0);
   const pivot = new THREE.Group();
