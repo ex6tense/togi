@@ -62,8 +62,20 @@
   .hero-main { display: grid; gap: 24px; margin-top: 20px; align-items: center; }
   .hero-main .lede { margin-top: 28px; }
   @media (min-width: 960px) { .hero-main { grid-template-columns: 1.15fr 1fr; } }
-  .gyuto { height: clamp(320px, 48vw, 640px); cursor: grab; touch-action: pan-y; }
-  .gyuto canvas { display: block; width: 100%; height: 100%; }
+  /* Un cuchillo que pasa por detrás de la página: la hoja sale por la derecha del hero y el mango por la izquierda,
+     más abajo. Cada vista se desvanece hacia el centro para que no se vea dónde se corta. */
+  .gyuto { height: 340px; margin-right: calc(-1 * var(--gutter)); pointer-events: none;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 30%); mask-image: linear-gradient(to right, transparent, #000 30%); }
+  .gyuto canvas, .mango canvas { display: block; width: 100%; height: 100%; }
+  .mango { display: none; }
+  @media (min-width: 960px) {
+    .hero { position: relative; padding-bottom: 280px; }            /* franja libre abajo para el mango */
+    .gyuto { position: absolute; right: 0; top: 50%; translate: 0 -40%; width: 44vw; height: min(620px, 42vw); margin: 0; }
+    #proceso { position: relative; }
+    #proceso > .wrap { position: relative; z-index: 1; }
+    .mango { display: block; position: absolute; left: 0; top: -400px; width: 36vw; height: min(520px, 34vw); pointer-events: none;
+      -webkit-mask-image: linear-gradient(to left, transparent, #000 45%); mask-image: linear-gradient(to left, transparent, #000 45%); }
+  }
 
   /* Roadmap chips */
   .section { padding: clamp(56px, 8vw, 112px) 0; border-top: 1px solid var(--line); }
@@ -137,13 +149,14 @@
             <a class="btn btn-ghost" href="#proceso">Ver el proceso</a>
           </div>
         </div>
-        <div id="gyuto" class="gyuto" role="img" aria-label="Modelo 3D de un cuchillo japonés de punta kiritsuke que gira siguiendo el cursor"></div>
+        <div id="gyuto" class="gyuto" role="img" aria-label="Hoja de un cuchillo japonés de punta kiritsuke en 3D"></div>
       </div>
     </div>
   </header>
 
   <!-- 01 Proceso -->
   <section class="section" id="proceso" aria-labelledby="proceso-t">
+    <div id="mango" class="mango" aria-hidden="true"></div>
     <div class="wrap">
       <p class="eyebrow"><b>01</b><span id="proceso-t">Proceso</span></p>
       <div class="hero-grid">
@@ -216,8 +229,13 @@
     box.classList.add('anim');
     const fallback = () => box.classList.remove('anim');
     const timer = setTimeout(fallback, 3000);             // si no cargó en 3 s, muestra el texto
-    img.onload = () => clearTimeout(timer);
+    const gotas = new Image(); gotas.src = 'titular-gotas.webp';   // bucle de gotas, se precarga mientras corre la entrada
     img.onerror = fallback;
+    img.onload = () => {
+      clearTimeout(timer);
+      img.onload = null;
+      setTimeout(() => { if (gotas.complete && gotas.naturalWidth) img.src = gotas.src; else gotas.onload = () => { img.src = gotas.src; }; }, 3450); // al terminar la entrada (3,3 s)
+    };
     img.src = 'titular.webp';
   })();
 </script>
