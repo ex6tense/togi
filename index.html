@@ -63,7 +63,11 @@
   .hero-main .lede { margin-top: 28px; }
   @media (min-width: 960px) { .hero-main { grid-template-columns: 1.15fr 1fr; } }
   /* La hoja sale del borde derecho del hero, con la punta hacia el texto. */
-  .gyuto { height: 340px; margin-right: calc(-1 * var(--gutter)); pointer-events: none; }
+  .gyuto { position: relative; height: 340px; margin-right: calc(-1 * var(--gutter)); cursor: grab; touch-action: pan-y; outline: none; }
+  .gyuto:active { cursor: grabbing; }
+  .gyuto:focus-visible { box-shadow: inset 0 0 0 2px var(--ink); border-radius: 8px; }
+  .gyuto .pista { position: absolute; left: 30%; bottom: 8%; margin: 0; font-size: 12px; letter-spacing: .04em; color: var(--muted); pointer-events: none; transition: opacity .6s; }
+  .gyuto.usado .pista { opacity: 0; }
   .gyuto canvas { display: block; width: 100%; height: 100%; }
   @media (min-width: 960px) {
     .hero { position: relative; }
@@ -142,7 +146,7 @@
             <a class="btn btn-ghost" href="#proceso">Ver el proceso</a>
           </div>
         </div>
-        <div id="gyuto" class="gyuto" role="img" aria-label="Hoja de un cuchillo japonés de punta kiritsuke en 3D"></div>
+        <div id="gyuto" class="gyuto" role="img" tabindex="0" aria-label="Hoja de un cuchillo japonés en 3D. Arrástrala o usa las flechas para girarla."><p class="pista" aria-hidden="true">Arrastra para girar</p></div>
       </div>
     </div>
   </header>
@@ -212,7 +216,7 @@
 </main>
 
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
-<script type="module" src="gyuto.js?v=5"></script>
+<script type="module" src="gyuto.js?v=6"></script>
 <script>
   // Titular: WebP animado en vez de video, porque iOS bloquea el autoplay de videos con ahorro de batería.
   (() => {

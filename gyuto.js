@@ -1,5 +1,6 @@
 // Cuchillo 3D del cuchillo real de Togi (punta kiritsuke, ~175 mm), con texturas sacadas de la foto.
-// Solo se ve la hoja: entra por el borde derecho del hero con la punta hacia el texto. Gira un poco con el cursor.
+// Solo se ve la hoja: entra por el borde derecho del hero con la punta hacia el texto. Sigue un poco al cursor
+// y se puede arrastrar (o girar con las flechas) para verla por todos lados.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
@@ -77,6 +78,31 @@ function montar(box) {
     target.y = (e.clientX / innerWidth - .5) * 0.6;
     target.x = (e.clientY / innerHeight - .5) * 0.35;
   });
+  // arrastrar para girar (ratón y táctil; en táctil solo horizontal para no bloquear el scroll) y flechas del teclado
+  const spin = { x: 0, y: 0 }, vel = { x: 0, y: 0 };
+  let drag = null;
+  const usado = () => box.classList.add('usado');
+  box.addEventListener('pointerdown', e => {
+    drag = { x: e.clientX, y: e.clientY, tactil: e.pointerType !== 'mouse' };
+    box.setPointerCapture(e.pointerId); usado();
+  });
+  box.addEventListener('pointermove', e => {
+    if (!drag) return;
+    vel.y = (e.clientX - drag.x) * .012;
+    vel.x = drag.tactil ? 0 : (e.clientY - drag.y) * .012;
+    spin.y += vel.y; spin.x += vel.x;
+    drag.x = e.clientX; drag.y = e.clientY;
+  });
+  const soltar = () => { drag = null; if (quieto) vel.x = vel.y = 0; };
+  box.addEventListener('pointerup', soltar);
+  box.addEventListener('pointercancel', soltar);
+  box.addEventListener('keydown', e => {
+    const k = { ArrowLeft: [0, -.08], ArrowRight: [0, .08], ArrowUp: [-.08, 0], ArrowDown: [.08, 0] }[e.key];
+    if (!k) return;
+    e.preventDefault(); usado();
+    vel.x += k[0]; vel.y += k[1];
+  });
+
   let visible = true;
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(box);
   const frame = t => {
@@ -84,8 +110,16 @@ function montar(box) {
     if (!visible) return;
     cur.x += (target.x - cur.x) * .06;
     cur.y += (target.y - cur.y) * .06;
+    if (!drag) {                                             // inercia y luego vuelve despacio a su pose
+      spin.x += vel.x; spin.y += vel.y;
+      vel.x *= .94; vel.y *= .94;
+      if (Math.abs(vel.x) + Math.abs(vel.y) < .002) {
+        spin.y = Math.atan2(Math.sin(spin.y), Math.cos(spin.y)); // la vuelta completa más corta
+        spin.x *= .97; spin.y *= .97;
+      }
+    }
     const f = quieto ? 0 : t / 1000;
-    pivot.rotation.set(base.x + cur.x + Math.sin(f * .8) * .02, base.y + cur.y + Math.sin(f * .5) * .05, base.z);
+    pivot.rotation.set(base.x + cur.x + spin.x + Math.sin(f * .8) * .02, base.y + cur.y + spin.y + Math.sin(f * .5) * .05, base.z);
     pivot.position.y = Math.sin(f * 1.1) * .04;
     renderer.render(scene, camera);
   };
