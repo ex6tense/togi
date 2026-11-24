@@ -89,15 +89,15 @@
   .entry .studio svg { width: min(52%, 520px); height: auto; }
   @media (max-width: 640px) { .entry .studio { aspect-ratio: 4 / 3; } .entry .studio svg { width: 80%; } }
 
-  /* Titular: video pre-renderado del efecto de agua encima del h1 real (que queda para buscadores y lectores).
-     El video es texto oscuro sobre blanco; con multiply el blanco desaparece sobre el fondo. */
+  /* Titular: animación pre-renderada (WebP animado, se reproduce una vez) encima del h1 real (que queda para buscadores y lectores).
+     Es texto oscuro sobre blanco; con multiply el blanco desaparece sobre el fondo. */
   .hero-main > div:first-child { container-type: inline-size; }
   .hero { overflow-x: clip; }
   .titular { position: relative; width: fit-content; font: 700 min(132px, 100cqw / 6.45)/.92 var(--display); }
   .titular h1 { font: inherit; white-space: nowrap; }
-  .titular video { position: absolute; left: -.7em; top: -.4em; width: 7.81em; height: 2.64em; mix-blend-mode: multiply; pointer-events: none; opacity: 0; }
-  .titular.video h1 { color: transparent; }
-  .titular.video video { opacity: 1; }
+  .titular img { position: absolute; left: -.7em; top: -.4em; width: 7.81em; height: 2.64em; mix-blend-mode: multiply; pointer-events: none; opacity: 0; }
+  .titular.anim h1 { color: transparent; }
+  .titular.anim img { opacity: 1; }
 
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
 </style>
@@ -125,7 +125,7 @@
         <div>
           <div class="titular">
             <h1>Filo de piedra,<br> no de máquina.</h1>
-            <video src="titular.mp4" muted playsinline preload="auto" aria-hidden="true"></video>
+            <img alt="" aria-hidden="true">
           </div>
           <p class="lede">Afilamos cada cuchillo a mano sobre piedras de agua japonesas. Sin calor, sin chispas y sin desgastar el acero de más: solo un filo limpio, preciso y que dura.</p>
           <div class="cta-row">
@@ -209,16 +209,16 @@
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 <script type="module" src="gyuto.js"></script>
 <script>
-  // Titular: reproduce el video una vez; si el navegador no deja (ahorro de batería, sin red) queda el texto normal.
+  // Titular: WebP animado en vez de video, porque iOS bloquea el autoplay de videos con ahorro de batería.
   (() => {
-    const box = document.querySelector('.titular'), v = box && box.querySelector('video');
-    if (!v || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    box.classList.add('video');
-    const fallback = () => box.classList.remove('video');
-    const timer = setTimeout(fallback, 3000);             // si no arrancó en 3 s, muestra el texto
-    v.addEventListener('playing', () => clearTimeout(timer), { once: true });
-    v.addEventListener('error', fallback);
-    v.play().catch(fallback);
+    const box = document.querySelector('.titular'), img = box && box.querySelector('img');
+    if (!img || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    box.classList.add('anim');
+    const fallback = () => box.classList.remove('anim');
+    const timer = setTimeout(fallback, 3000);             // si no cargó en 3 s, muestra el texto
+    img.onload = () => clearTimeout(timer);
+    img.onerror = fallback;
+    img.src = 'titular.webp';
   })();
 </script>
 </body>
